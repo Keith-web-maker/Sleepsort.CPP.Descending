@@ -1,11 +1,14 @@
 Sleep Sort
+
 How It Works
+
  Instead of sitting there comparing numbers against each other like every other sorting algorithm does, this one just makes each number wait.
  An example is like  you are a teacher and you tell every student in the class to go stand outside, then come back in after waiting a number of minutes equal to their exam score. The student who scored 2 waits 2 minutes. The student who scored 9 waits 9 minutes. Obviously the student with the lowest score walks back in first, then the next lowest, and so on. By the time everyone has returned, they have naturally lined themselves up in order without anyone ever comparing scores directly. That is exactly what sleep sort does, except the students are threads and the waiting is done in milliseconds.
 In the code each number gets its own thread. That thread immediately goes to sleep for a duration equal to its value multiplied by a time unit (10ms in my program). When the thread wakes up it adds its number to the output list. Since smaller numbers sleep less, they wake up first and get added first. The result comes out sorted.
 For descending order specifically,  the threads still sleep the same way but when each one wakes and tries to insert its value, the insertion logic checks whether the value belongs before or after what is already in the list, placing larger values toward the front. So the list fills from largest to smallest as threads wake.
 ________________________________________
-Step by Step Example
+An example Example
+
 I will use the list [3, 7, 1, 5, 2] and sort it in descending order.
 The time unit is 10ms, so each number sleeps for its value times 10.
 First, five threads are created at the same time, one for each number:
