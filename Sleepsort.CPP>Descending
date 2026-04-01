@@ -1,0 +1,217 @@
+#include <iostream>
+#include <vector>
+#include <windows.h>
+#include <process.h>
+#include <string>
+
+using namespace std;
+
+vector<int> sorted_output;
+long long comparisons = 0;
+long long swaps = 0;
+HANDLE mutex_handle;
+
+struct ThreadData {
+    int value;
+    int time_unit;
+};
+
+unsigned __stdcall thread_func(void* param) {
+    ThreadData* data = (ThreadData*)param;
+    int value = data->value;
+    int sleep_time = value * data->time_unit;
+
+    Sleep(sleep_time);
+
+    WaitForSingleObject(mutex_handle, INFINITE);
+
+    comparisons++;
+    int insert_pos = (int)sorted_output.size();
+
+    while (insert_pos > 0 && sorted_output[insert_pos - 1] < value) {
+        comparisons++;
+        insert_pos--;
+    }
+
+    swaps += (int)sorted_output.size() - insert_pos;
+    sorted_output.insert(sorted_output.begin() + insert_pos, value);
+
+    ReleaseMutex(mutex_handle);
+
+    delete data;
+    return 0;
+}
+
+struct SortResult {
+    vector<int> sorted;
+    long long num_comparisons;
+    long long num_swaps;
+    double elapsed_ms;
+};
+
+SortResult run_sleep_sort(const vector<int>& input, int time_unit = 10) {
+    sorted_output.clear();
+    comparisons = 0;
+    swaps = 0;
+
+    mutex_handle = CreateMutex(NULL, FALSE, NULL);
+
+    DWORD start_time = GetTickCount();
+
+    int n = (int)input.size();
+    HANDLE* handles = new HANDLE[n];
+
+    for (int i = 0; i < n; i++) {
+        ThreadData* data = new ThreadData();
+        data->value = input[i];
+        data->time_unit = time_unit;
+        handles[i] = (HANDLE)_beginthreadex(NULL, 0, thread_func, data, 0, NULL);
+    }
+
+    WaitForMultipleObjects(n, handles, TRUE, INFINITE);
+
+    DWORD end_time = GetTickCount();
+    double elapsed = (double)(end_time - start_time);
+
+    for (int i = 0; i < n; i++) {
+        CloseHandle(handles[i]);
+    }
+    delete[] handles;
+    CloseHandle(mutex_handle);
+
+    SortResult result;
+    result.sorted = sorted_output;
+    result.num_comparisons = comparisons;
+    result.num_swaps = swaps;
+    result.elapsed_ms = elapsed;
+
+    return result;
+}
+
+void print_vector(const vector<int>& v, const string& label) {
+    cout << label << ": [ ";
+    for (int i = 0; i < (int)v.size(); i++) {
+        cout << v[i];
+        if (i + 1 < (int)v.size()) cout << ", ";
+    }
+    cout << " ]" << endl;
+}
+
+vector<int> get_input() {
+    vector<int> numbers;
+    int n;
+
+    cout << "How many numbers do you want to sort? ";
+    while (!(cin >> n) || n <= 0) {
+        cin.clear();
+        cin.ignore(1000, '\n');
+        cout << "Please enter a valid positive number: ";
+    }
+
+    cout << "Enter " << n << " positive integers (each greater than 0):" << endl;
+    for (int i = 0; i < n; i++) {
+        int val;
+        cout << "  Number " << (i + 1) << ": ";
+        while (!(cin >> val) || val <= 0) {
+            cin.clear();
+            cin.ignore(1000, '\n');
+            cout << "  Invalid! Enter a positive integer for number " << (i + 1) << ": ";
+        }
+        numbers.push_back(val);
+    }
+
+    return numbers;
+}
+
+void print_step_by_step(const vector<int>& input) {
+    cout << endl;
+    cout << "  Step-by-step trace (descending order):" << endl;
+
+    vector<int> temp = input;
+
+    for (int i = 0; i < (int)temp.size() - 1; i++) {
+        for (int j = i + 1; j < (int)temp.size(); j++) {
+            if (temp[j] > temp[i]) {
+                int t = temp[i]; temp[i] = temp[j]; temp[j] = t;
+            }
+        }
+    }
+
+    vector<int> built;
+    for (int i = 0; i < (int)temp.size(); i++) {
+        built.push_back(temp[i]);
+        cout << "  Thread for value " << temp[i]
+             << " -> sleeps " << temp[i] << "x10ms = "
+             << temp[i] * 10 << "ms -> wakes -> output: [ ";
+        for (int j = 0; j < (int)built.size(); j++) {
+            cout << built[j];
+            if (j + 1 < (int)built.size()) cout << ", ";
+        }
+        cout << " ]" << endl;
+    }
+}
+
+int main() {
+    char again = 'y';
+
+    while (again == 'y' || again == 'Y') {
+        cout << endl;
+        cout << "==========================================" << endl;
+        cout << "         S L E E P   S O R T" << endl;
+        cout << "      ( Descending Order )" << endl;
+        cout << "==========================================" << endl;
+        cout << endl;
+
+        vector<int> input = get_input();
+
+        cout << endl;
+        print_vector(input, "  Input ");
+
+        print_step_by_step(input);
+
+        cout << endl;
+        cout << "  Sorting... please wait." << endl;
+
+        SortResult result = run_sleep_sort(input);
+
+        cout << endl;
+        cout << "==========================================" << endl;
+        cout << "               R E S U L T S" << endl;
+        cout << "==========================================" << endl;
+        print_vector(input,         "  Input ");
+        print_vector(result.sorted, "  Output");
+        cout << "  Comparisons : " << result.num_comparisons << endl;
+        cout << "  Swaps       : " << result.num_swaps << endl;
+        cout << "  Wall time   : " << result.elapsed_ms << " ms" << endl;
+
+        cout << endl;
+        cout << "==========================================" << endl;
+        cout << "  COMPLEXITY ANALYSIS" << endl;
+        cout << "==========================================" << endl;
+        cout << "  Time Complexity" << endl;
+        cout << "  ---------------" << endl;
+        cout << "  Best case    O(max V)     - threads overlap, small values" << endl;
+        cout << "  Average case O(max V)     - same reasoning" << endl;
+        cout << "  Worst case   O(max V + n) - large values or mutex contention" << endl;
+        cout << endl;
+        cout << "  Comparison/Swap complexity (tie-breaking)" << endl;
+        cout << "  -----------------------------------------" << endl;
+        cout << "  Best  O(n)   - no ties, each thread appends in O(1)" << endl;
+        cout << "  Avg   O(n)   - random data, ties are rare" << endl;
+        cout << "  Worst O(n^2) - all elements equal" << endl;
+        cout << endl;
+        cout << "  Space Complexity" << endl;
+        cout << "  ----------------" << endl;
+        cout << "  O(n) - one thread + one output slot per element" << endl;
+        cout << "==========================================" << endl;
+
+        cout << endl;
+        cout << "Do you want to sort another list? (y/n): ";
+        cin >> again;
+    }
+
+    cout << endl;
+    cout << "Thank you for using Sleep Sort." << endl;
+
+    return 0;
+}
